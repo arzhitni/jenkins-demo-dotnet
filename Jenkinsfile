@@ -34,6 +34,12 @@ pipeline {
       }
     }
 
+    stage('Publish') {
+      steps {
+        sh 'dotnet publish src/DemoApi/DemoApi.csproj -c Release -o publish'
+      }
+    }
+
     stage('Docker build') {
       steps {
         script {

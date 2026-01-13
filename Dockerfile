@@ -1,11 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-WORKDIR /src
-COPY . .
-RUN dotnet publish src/DemoApi/DemoApi.csproj -c Release -o /app/publish
-
-FROM mcr.microsoft.com/dotnet/aspnet:8.0
+FROM alpine:latest
 WORKDIR /app
-COPY --from=build /app/publish .
-EXPOSE 8080
-ENV ASPNETCORE_URLS=http://+:8080
-ENTRYPOINT ["dotnet", "DemoApi.dll"]
+COPY ./publish/ /app/
+CMD ["sh", "-lc", "ls -la /app && echo Demo image built OK"]
