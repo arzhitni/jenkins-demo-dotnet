@@ -10,33 +10,41 @@ pipeline {
   stages {
     stage('Checkout') { steps { checkout scm } }
 
-    stage('Restore') { steps { sh 'dotnet restore' } }
-
-    stage('Build') { steps { sh 'dotnet build -c Release --no-restore' } }
-
-    stage('Test') {
-      steps {
-        sh '''
-          rm -rf TestResults || true
-          dotnet test -c Release --no-build \
-            --logger "trx;LogFileName=test_results.trx" \
-            --results-directory TestResults
-        '''
-      }
-      post {
-        always {
-          step([$class: 'MSTestPublisher',
-            testResultsFile: '**/TestResults/*.trx',
-            failOnError: false,
-            keepLongStdio: true
-          ])
+    stage('Build + Test + Publish') {
+      agent {
+        docker {
+          image 'jenkins-dotnet-agent:8.0'
+          reuseNode true
         }
       }
-    }
-
-    stage('Publish') {
-      steps {
-        sh 'dotnet publish src/DemoApi/DemoApi.csproj -c Release -o publish'
+      stages {
+        stage('Restore') { steps { sh 'dotnet restore' } }
+        stage('Build')   { steps { sh 'dotnet build -c Release --no-restore' } }
+        stage('Test') {
+          steps {
+            sh '''
+              rm -rf TestResults || true
+              dotnet test -c Release --no-build \
+                --logger "trx;LogFileName=test_results.trx" \
+                --results-directory TestResults
+            '''
+          }
+          post {
+            always {
+              step([$class: 'MSTestPublisher',
+                testResultsFile: '**/TestResults/*.trx',
+                failOnError: false,
+                keepLongStdio: true
+              ])
+            }
+          }
+        }
+        stage('Publish') {
+          steps {
+            sh 'rm -rf publish || true'
+            sh 'dotnet publish src/DemoApi/DemoApi.csproj -c Release -o publish'
+          }
+        }
       }
     }
 
