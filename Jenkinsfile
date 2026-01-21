@@ -5,21 +5,23 @@ pipeline {
   environment {
     DOTNET_CLI_TELEMETRY_OPTOUT = "1"
     DOCKER_HOST = "unix:///var/run/docker.sock"
+    IMAGE = "demo/demoapi:${env.BUILD_NUMBER}"
+    CONTAINER = "demoapi-${env.BUILD_NUMBER}"
   }
 
   stages {
-    stage('Checkout') { steps { checkout scm } }
-
-    stage('Build + Test + Publish') {
+    stage('Checkout') {
+      steps { checkout scm }
+    }
+    stage('Build + Test') {
       agent {
         docker {
-          image 'jenkins-dotnet-agent:8.0'
+          image 'mcr.microsoft.com/dotnet/sdk:9.0'
           reuseNode true
         }
       }
       stages {
-        stage('Restore') { steps { sh 'dotnet restore' } }
-        stage('Build')   { steps { sh 'dotnet build -c Release --no-restore' } }
+        stage('Build') { steps { sh 'dotnet restore && dotnet build -c Release --no-restore' } }
         stage('Test') {
           steps {
             sh '''
@@ -39,23 +41,51 @@ pipeline {
             }
           }
         }
-        stage('Publish') {
-          steps {
-            sh 'rm -rf publish || true'
-            sh 'dotnet publish src/DemoApi/DemoApi.csproj -c Release -o publish'
-          }
+      }
+    }
+    
+    stage('Docker build') {
+      steps {
+        script {
+          docker.build(env.IMAGE, ".")
+          sh "docker image ls ${env.IMAGE} --digests || true"
         }
       }
     }
 
-    stage('Docker build') {
+    stage('Run container') {
       steps {
         script {
-          def tag = "demo/demoapi:${env.BUILD_NUMBER}"
-          def img = docker.build(tag, ".")
-          echo "Built image: ${img.id} (${tag})"
+          sh """
+            docker rm -f ${env.CONTAINER} >/dev/null 2>&1 || true
+            docker run -d --name ${env.CONTAINER} -p 18080:8080 ${env.IMAGE}
+          """
         }
       }
+    }
+
+    stage('Health check') {
+      steps {
+        sh '''
+          set -e
+          for i in $(seq 1 30); do
+            if wget -qO- http://localhost:18080/health >/dev/null 2>&1; then
+              echo "Health check OK"
+              exit 0
+            fi
+            echo "Waiting for service... ($i/30)"
+            sleep 1
+          done
+          echo "Service did not become healthy"
+          exit 1
+        '''
+      }
+    }
+  }
+
+  post {
+    always {
+      sh "docker rm -f ${env.CONTAINER} >/dev/null 2>&1 || true"
     }
   }
 }
