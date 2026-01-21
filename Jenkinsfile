@@ -43,7 +43,7 @@ pipeline {
         }
       }
     }
-    
+
     stage('Docker build') {
       steps {
         script {
@@ -65,22 +65,36 @@ pipeline {
     }
 
     stage('Health check') {
-      steps {
-        sh '''
-          set -e
-          for i in $(seq 1 30); do
-            if wget -qO- http://localhost:18080/health >/dev/null 2>&1; then
-              echo "Health check OK"
-              exit 0
-            fi
-            echo "Waiting for service... ($i/30)"
-            sleep 1
-          done
-          echo "Service did not become healthy"
-          exit 1
-        '''
-      }
+    steps {
+      sh '''
+        set -e
+
+        for i in $(seq 1 10); do
+          state=$(docker inspect -f '{{.State.Status}}' "$CONTAINER" 2>/dev/null || true)
+          [ "$state" = "running" ] && break
+          echo "Container state: $state (waiting...)"
+          sleep 1
+        done
+
+        for i in $(seq 1 30); do
+          if docker run --rm --network "container:${CONTAINER}" alpine:latest sh -lc \
+            "apk add --no-cache wget >/dev/null 2>&1 && wget -qO- http://localhost:8080/health >/dev/null 2>&1"
+          then
+            echo "Health check OK"
+            exit 0
+          fi
+
+          echo "Waiting for service... ($i/30)"
+          sleep 1
+        done
+
+        echo "Service did not become healthy"
+        docker logs "$CONTAINER" || true
+        exit 1
+      '''
     }
+}
+
   }
 
   post {
