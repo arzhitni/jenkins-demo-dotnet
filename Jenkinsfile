@@ -6,6 +6,8 @@ pipeline {
 
   environment {
     DOTNET_CLI_TELEMETRY_OPTOUT = "1"
+    IMAGE = "demo/demoapi:${env.BUILD_NUMBER}"
+    CONTAINER = "demoapi-${env.BUILD_NUMBER}"
   }
 
   stages {
@@ -13,26 +15,36 @@ pipeline {
       steps { checkout scm }
     }
 
-    stage('Build + Test + Publish') {
+    stage('CI (Build + Test)') {
       steps {
-        dotnetCi(
-          image: 'jenkins-dotnet-agent:9.0',
-          config: 'Release',
-          project: 'src/DemoApi/DemoApi.csproj',
-          publishDir: 'publish',
-          resultsDir: 'TestResults',
-          stashName: 'publish-dir'
-        )
+        dotnetCi(image: 'jenkins-dotnet-agent:8.0', config: 'Release')
       }
     }
 
-    stage('Docker') {
+    stage('Docker build') {
       steps {
-        dockerBuildArtifact(
-          image: "demo/app:${env.BUILD_NUMBER}",
-          stashName: 'publish-dir'
-        )
+        dockerBuildImage(image: env.IMAGE, dockerfile: 'Dockerfile', contextDir: '.')
       }
+    }
+
+    stage('Run') {
+      steps {
+        script {
+          dockerRunContainer(image: env.IMAGE, name: env.CONTAINER, hostPort: 18080, containerPort: 8080)
+        }
+      }
+    }
+
+    stage('Health') {
+      steps {
+        dockerHealthCheck(name: env.CONTAINER, path: '/health', port: 8080)
+      }
+    }
+  }
+
+  post {
+    always {
+      dockerRemoveContainer(name: env.CONTAINER)
     }
   }
 }
