@@ -15,9 +15,9 @@ pipeline {
       steps { checkout scm }
     }
 
-    stage('CI (Build + Test)') {
+    stage('Build + Test') {
       steps {
-        dotnetCi(image: 'jenkins-dotnet-agent:8.0', config: 'Release')
+        dotnetCi(image: 'mcr.microsoft.com/dotnet/sdk:9.0', config: 'Release')
       }
     }
 
