@@ -23,7 +23,7 @@ pipeline {
 
     stage('Docker build') {
       steps {
-        dockerBuildImage(image: env.IMAGE, dockerfile: 'Dockerfile', contextDir: '.')
+        dockerBuildImage(image: env.IMAGE)
       }
     }
 
